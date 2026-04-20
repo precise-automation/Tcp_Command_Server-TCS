@@ -1,9 +1,23 @@
 Release notes for TCP Command Server
 
+TCP Command Server 3.0D4, October 25, 2024
+	Supersedes 3.0D3 built 2 days ago.
+
+	o Add full support for c3, c5, c8, and c10 robots to all
+	  PARobot and SSGrip commands:
+
+	  ChangeConfig, ChangeConfig2, FreeMode, GraspData, GripClosePos,
+	  GripOpenPos, Gripper, HomeAll, MoveRail, MoveToSafe, PalletIndex,
+	  PalletOrigin, PalletX, PalletY, PalletZ, PickPlate, PlacePlate, Rail,
+	  StationType,
+
+	  GetActiveGripper, GraspPlate, IsFullyClosed, ReleasePlate,
+	  SetActiveGripper, TeachPlate,
+
 TCP Command Server 3.0D3, October 23, 2024
 
 	o Add height-detect support for PreciseFlex c3, c5,
-	  and c10 robots.
+	  and c10 robots.  Note: c8 robots not supported.
 	  Requires GPL 5.1A2-Beta or later.
 
 	o Add full support for c3 robot to commands:

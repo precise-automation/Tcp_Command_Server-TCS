@@ -14,7 +14,7 @@
 
 Module PARobot ' PARobot Robot Command Implementation Module
 
-    Private Const Version As String = "PARobot Module 3.0D3 10-23-2024"
+    Private Const Version As String = "PARobot Module 3.0D4 10-25-2024"
 
     'Customization
 
@@ -164,14 +164,14 @@ Module PARobot ' PARobot Robot Command Implementation Module
 ' ABSTRACT:  This routine is called after a new command object is created for a
 '       robot.  It modifies the command object and builts local data structures.
 '
-'       If the robot is of type "PF400" or "PF300" or "PP100" or "PAVP6":
+'       If the robot is of type "PF400" or "PF300" or "PP100" or "PAVP6" or "DD4/C10" or "DD6/C8A" or C3 or C5:
 '
 '       -   the GripAxis, RailAxis and ThetaAxis properties are set equal to
 '           the number of the  appropriate axis or left 0 if not configured.
 '       -   The module globals such as the default locations and gripper
 '           positions are defined as appropriate.
 '       -   If the robot has a rail, the rail orientation is computed.
-'   
+'
 ' INPUTS:   Cmd     Is the new Command object, filled in by the command New sub.
 '
 ' OUTPUTS:  Reply   A dummy string, not used.
@@ -189,16 +189,17 @@ Module PARobot ' PARobot Robot Command Implementation Module
         rbType = Cmd.Rob.RobType
         axisMask = Controller.PDbNum(2003, rb, 0, 1)
         numaxes = Cmd.Rob.RobNumAxes
-        
+
         Select rbType
-        
-        ' For a PF400/PF300, set globals for Theta, servo gripper, and rail.
+
+        ' For a PF400/PF300/C3, set globals for Theta, servo gripper, and rail.
+
         Case PF400, PF300, C3
             axis = 4                        ' First optional axis
             If (axisMask And &H8) <> 0 Then ' Theta axis?
                 Cmd.Rob.ThetaAxis = axis
                 axis += 1
-            End If  
+            End If
             If (axisMask And &H20) <> 0 Then' Has servo gripper?
                 Cmd.Rob.GripAxis = axis
                 axis += 1
@@ -212,7 +213,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
                 axis += 1
             End If
             ' Initialize module globals.
-            
+
             SafeLoc(rb) = New Location      ' Predefined Safe Location
             Righty_j(rb)= New Location      ' Righty/Lefty entry points
             Lefty_j(rb) = New Location
@@ -221,7 +222,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
                 GRIP_OPEN(rb) = 100         ' Gripper open position
                 GRIP_CLOSE(rb) = 75.5       ' Gripper close position
             'POSITIONS
-            
+
                 If Cmd.Rob.InactiveGripAxis <> 0 Then
                     'Positions for dual gripper
                     SafeLoc(rb).Angles( 170,0,180,-90,GRIP_CLOSE(rb) )
@@ -229,7 +230,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
                     ' Joint Location that Defines Entry points for Righty & Lefty
                     Righty_j(rb).Angles( 170,10,140,-60,GRIP_CLOSE(rb) )
                     Lefty_j(rb).Angles( 170,-10,220,-120,GRIP_CLOSE(rb) )
-                
+
                 Else
                     'Positions for non dual gripper
                     SafeLoc(rb).Angles( 170,0,180,-180,GRIP_CLOSE(rb) )
@@ -237,9 +238,9 @@ Module PARobot ' PARobot Robot Command Implementation Module
                     ' Joint Location that Defines Entry points for Righty & Lefty
                     Righty_j(rb).Angles( 170,10,120,-130,GRIP_CLOSE(rb) )
                     Lefty_j(rb).Angles( 170,-20,240,-225,GRIP_CLOSE(rb) )
-            
+
                 End If
-            
+
             Else                            ' PF300
                 GRIP_OPEN(rb) = 45          ' Gripper open position
                 GRIP_CLOSE(rb) = 10         ' Gripper close position
@@ -266,19 +267,114 @@ Module PARobot ' PARobot Robot Command Implementation Module
             GRIP_CLOSE(rb) = 75.5           ' Gripper close position
 
         ' For the PAVP6, no servo gripper or rail but it has a Theta.
-        
+
         Case PAVP6
             Cmd.Rob.ThetaAxis = numaxes-1   ' Theta axis
             GRIP_OPEN(rb) = 100             ' Fill in for completeness
             GRIP_CLOSE(rb) = 75.5
-        
+
+        ' For a PFDD4/PFC10/C5, set globals for servo gripper, and rail.
+        Case DD4, C5
+            axis = 4                        'Default robot configuration (PFDD4/PFC10/C5)
+            Cmd.Rob.ThetaAxis = axis
+            axis += 1
+            If (axisMask And &H20) <> 0 Then' Has servo gripper?
+                Cmd.Rob.GripAxis = axis
+                axis += 1
+            End If
+            If (axisMask And &H40) <> 0 Then' Has linear rail?
+                Cmd.Rob.RailAxis = axis
+                axis += 1
+            End If
+            If (axisMask And &H80) <> 0 Then' Has second gripper axis?
+                Cmd.Rob.InactiveGripAxis = axis
+                axis += 1
+            End If
+
+            ' Initialize module globals.
+            SafeLoc(rb) = New Location      ' Predefined Safe Location
+            Righty_j(rb) = New Location      ' Righty/Lefty entry points
+            Lefty_j(rb) = New Location
+
+            GRIP_OPEN(rb) = 100         ' Gripper open position
+            GRIP_CLOSE(rb) = 75.5       ' Gripper close position
+
+            'POSITIONS
+            If rbType = DD4 Then
+                If Cmd.Rob.InactiveGripAxis <> 0 Then
+                    'Positions for dual gripper
+                    SafeLoc(rb).Angles(0, 200, 180, 90, GRIP_CLOSE(rb))
+                    Safeloc(rb).Angle(Cmd.Rob.InactiveGripAxis) = GRIP_CLOSE(rb)
+                    Park_j(rb) = SafeLoc(rb).clone' Tucked in position
+
+                    ' Joint Location that Defines Entry points for Righty & Lefty
+                    Righty_j(rb).Angles(0, 200, 135, 135, GRIP_CLOSE(rb))
+                    Righty_j(rb).Angle(Cmd.Rob.InactiveGripAxis) = GRIP_CLOSE(rb)
+
+                    Lefty_j(rb).Angles(0, 200, 225, 45, GRIP_CLOSE(rb))
+                    Lefty_j(rb).Angle(Cmd.Rob.InactiveGripAxis) = GRIP_CLOSE(rb)
+
+                Else
+                    'Positions for non-dual gripper, or no gripper
+                    SafeLoc(rb).Angles(0, 200, 180, 0, GRIP_CLOSE(rb))
+                    Park_j(rb) = SafeLoc(rb).clone' Tucked in position
+                    ' Joint Location that Defines Entry points for Righty & Lefty
+                    Righty_j(rb).Angles(0, 200, 135, 45, GRIP_CLOSE(rb))
+                    Lefty_j(rb).Angles(0, 200, 225, -45, GRIP_CLOSE(rb))
+                End If
+
+            Else 'C5 robot type
+                If Cmd.Rob.InactiveGripAxis <> 0 Then
+                    'Positions for dual gripper
+                    SafeLoc(rb).Angles(0, 200, 180, -90, GRIP_CLOSE(rb))'
+                    Safeloc(rb).Angle(Cmd.Rob.InactiveGripAxis) = GRIP_CLOSE(rb)
+                    Park_j(rb) = SafeLoc(rb).clone' Tucked in position
+
+                    ' Joint Location that Defines Entry points for Righty & Lefty
+                    Righty_j(rb).Angles(0, 200, 135, -60, GRIP_CLOSE(rb))'
+                    Righty_j(rb).Angle(Cmd.Rob.InactiveGripAxis) = GRIP_CLOSE(rb)
+
+                    Lefty_j(rb).Angles(0, 200, 225, -120, GRIP_CLOSE(rb))
+                    Lefty_j(rb).Angle(Cmd.Rob.InactiveGripAxis) = GRIP_CLOSE(rb)
+
+                Else
+                    'Positions for non-dual gripper, or no gripper
+                    SafeLoc(rb).Angles(0, 200, 180, -180, GRIP_CLOSE(rb))
+                    Park_j(rb) = SafeLoc(rb).clone' Tucked in position
+                    ' Joint Location that Defines Entry points for Righty & Lefty
+                    Righty_j(rb).Angles(0, 200, 135, -135, GRIP_CLOSE(rb))
+                    Lefty_j(rb).Angles(0, 200, 225, -225, GRIP_CLOSE(rb))
+                End If
+            End If
+
+        ' For a PFDD6/PFC8A, set globals for servo gripper, and rail.
+        Case DD6
+            axis = 6                        'Default robot configuration (PFDD6/PFC8A)
+            Cmd.Rob.ThetaAxis = axis
+
+            ' Initialize module globals.
+            SafeLoc(rb) = New Location      ' Predefined Safe Location
+            Righty_j(rb) = New Location      ' Righty/Lefty entry points
+            Lefty_j(rb) = New Location
+
+            GRIP_OPEN(rb) = 100         ' Gripper open position
+            GRIP_CLOSE(rb) = 75.5       ' Gripper close position
+
+            'POSITIONS
+
+            'Positions for non-dual gripper, or no gripper
+            SafeLoc(rb).Angles(0, 200, 180, 0, 90, 0, GRIP_CLOSE(rb))
+            Park_j(rb) = SafeLoc(rb).clone' Tucked in position
+            ' Joint Location that Defines Entry points for Righty & Lefty
+            Righty_j(rb).Angles(0, 200, 135, 0, 90, -45, GRIP_CLOSE(rb))
+            Lefty_j(rb).Angles(0, 200, 225, 0, 90, 45, GRIP_CLOSE(rb))
+
         ' Unknown robot, generate an error.
-        
         Case Else
-            Goto _exit                      ' Not C3, PF400, PF300, PP100 or PAVP6
-            
+            GoTo _exit ' Not PF400, PF300, PP100, PAVP6, DD4/C10, DD6/C8A, C3, C5
+
         End Select
-        
+
         ' If a rail is configured, compute sine and cosine of direction
 
         If Cmd.Rob.RailAxis Then
@@ -412,7 +508,11 @@ Module PARobot ' PARobot Robot Command Implementation Module
 ' Cmd_MoveToSafe -- Move robot to a safe postion
 '
 ' ABSTRACT: Command to Move a Robot to Safe Position
-'           Function applicable only to PF400/PF300 Robots with a PreciseFlex
+'           Function applicable only to
+'           PF400/PF300/C3
+'           PFDD4,PFC10/PFDD6,PFC8A
+'           C5
+'           Robots With a PreciseFlex
 '           Servo or Pneumatic Gripper
 '
 '           This routine doesn't includes check for collision inside
@@ -424,14 +524,17 @@ Module PARobot ' PARobot Robot Command Implementation Module
     Public Sub Cmd_MoveToSafe(ByVal Cmd As Command, ByRef Reply As String)
         Dim CurConfig As Integer
         Dim safetmp As Location
+        Dim rbType As Integer
         Dim ex As Exception
 
+        rbType = Cmd.Rob.RobType
         CurConfig = Robot.Where.config
 
-        If (Cmd.Rob.RobType <> PF400) AndAlso (Cmd.Rob.RobType <> PF300) AndAlso (Cmd.Rob.RobType <> C3)Then
-            Reply =  EcInvRobType       ' Invalid Robot Type
+        Select rbType
+        Case PF400, PF300, DD4, DD6, C3, C5
+        Case Else
             Goto _exit
-        End If
+        End Select
 
         ' Make sure the Gripper is closed
 
@@ -441,10 +544,21 @@ Module PARobot ' PARobot Robot Command Implementation Module
         End If
 
         ' Get robot to safe position from which we can move to park
+        Select rbType
 
-        If (Math.Abs(Robot.WhereAngles.Angle(2)) > 5) Then
-            Move.OneAxis(2, 5*Math.Sign(Robot.WhereAngles.Angle(2)), False, moderate_ji)
-        End If
+        'For PF400/PF300/C3
+        Case PF400, PF300, C3
+            If (Math.Abs(Robot.WhereAngles.Angle(2)) > 5) Then
+                Move.OneAxis(2, 5*Math.Sign(Robot.WhereAngles.Angle(2)), False, moderate_ji)
+            End If
+
+        'For DDX, C5
+        Case DD4, DD6, C5
+            If (Math.Abs(Robot.WhereAngles.Angle(1)) > 5) Then
+                Move.OneAxis(1, 5 * Math.Sign(Robot.WhereAngles.Angle(1)), False, moderate_ji)
+            End If
+
+        End Select
 
         If Robot.TrajState = 10 Then    ' WaitForEom may hang if jog mode
             ex = New Exception
@@ -456,25 +570,57 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Move.WaitForEOM
 
         ' Move Robot
+        ' This is valid for PF400/PF300 & DDX/CX robot types
         If (Robot.WhereAngles.angle(3) < 180) Then
             Move.OneAxis(3, 180-65, False, moderate_ji)
         Else
             Move.OneAxis(3, 180+65, False, moderate_ji)
         End If
-
         Move.WaitForEOM
-        If (Cmd.Rob.ThetaAxis <> 0) Then
-            If Cmd.Rob.InactiveGripAxis <> 0 Then
-                If CurConfig And GPL_Righty Then ' In Righty changing to Lefty
-                    Move.OneAxis(4,  -90+45, False, moderate_ji)
+
+        Select rbType
+
+        Case PF300, PF400, C3, C5
+            If (Cmd.Rob.ThetaAxis <> 0) Then
+                If Cmd.Rob.InactiveGripAxis <> 0 Then
+                    If CurConfig And GPL_Righty Then ' In Righty changing to Lefty
+                        Move.OneAxis(4,  -90+45, False, moderate_ji)
+                    Else
+                        Move.OneAxis(4,  -90-45, False, moderate_ji)
+                    End If
                 Else
-                    Move.OneAxis(4,  -90-45, False, moderate_ji)
+                    Move.OneAxis(4, -180, False, moderate_ji)
                 End If
-            Else
-                Move.OneAxis(4, -180, False, moderate_ji)
-            End If
            
-        End If
+            End If
+
+        Case DD4
+            If (Cmd.Rob.ThetaAxis <> 0) Then
+                If Cmd.Rob.InactiveGripAxis <> 0 Then
+                    If CurConfig And GPL_Righty Then ' In Righty changing to Lefty
+                        Move.OneAxis(4, 90 + 45, False, moderate_ji)
+                    Else
+                        Move.OneAxis(4, 90 -45, False, moderate_ji)
+                    End If
+                Else
+                    Move.OneAxis(4, 0, False, moderate_ji)
+                End If
+            End If
+
+        Case DD6
+            If (Math.Abs(Robot.WhereAngles.Angle(4)) > 5) Then
+                Move.OneAxis(4, 5 * Math.Sign(Robot.WhereAngles.Angle(4)), False, moderate_ji)
+            End If
+            Move.WaitForEOM
+
+            If (CurConfig And GPL_FLIP) Then 'In FLIP (wrist pitched up) change to NO_FLIP
+                Move.OneAxis(5, 90, False, moderate_ji)
+            End If
+            Move.WaitForEOM
+
+            Move.OneAxis(6, 0, False, moderate_ji)
+
+        End Select
         Move.WaitForEOM
 
         ' Move Robot to Safe
@@ -500,7 +646,12 @@ Module PARobot ' PARobot Robot Command Implementation Module
 ' Cmd_ChangeConfig -- Change robot configuration between right and lefty
 '
 ' ABSTRACT: Command to change Robot configuration between Righty and Lefty
-'           Function applicable only to PF400/PF300 Robots with a PreciseFlex
+'           Function applicable only to
+'           PF400/PF300/C3
+'           DD4/DD6
+'           C10/C8A
+'           C5
+'           Robots With a PreciseFlex
 '           Servo & Pneumatic Gripper
 '
 '           This routine doesn't includes check for collision inside
@@ -523,12 +674,15 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Dim grip_pos As Double
         Dim grip As Integer = Cmd.Rob.GripAxis
         Dim rb As Integer = Cmd.Rob.RobNum
+        Dim rbType As Integer = Cmd.Rob.RobType
         Dim ex As Exception
 
-        If (Cmd.Rob.RobType <> PF400) AndAlso (Cmd.Rob.RobType <> PF300) AndAlso (Cmd.Rob.RobType <> C3) Then
+        Select rbType
+        Case PF400, PF300, DD4, DD6, C3, C5
+        Case Else
             Reply =  EcInvRobType       ' Invalid Robot Type
             Goto _exit
-        End If
+        End Select
 
         Cmd.StringToDouble(0)
 
@@ -546,6 +700,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
             ex.RobotNum = cmd.Rob.RobNum
             Throw ex
         End If
+
         Move.WaitForEOM
         CurConfig = Robot.Where.config
 
@@ -604,37 +759,86 @@ Module PARobot ' PARobot Robot Command Implementation Module
         
         ' Get robot to safe position from which we can move to park
         
-        If (Math.Abs(Robot.WhereAngles.Angle(2)) > 15) Then
-            Move.OneAxis(2, 15*Math.Sign(Robot.WhereAngles.Angle(2)), False, moderate_ji)
+        'For PF300, PF400, C3
+        If (rbType = PF300) OrElse (rbType = PF400) OrElse (rbType = C3) Then
+            If (Math.Abs(Robot.WhereAngles.Angle(2)) > 15) Then
+                Move.OneAxis(2, 15*Math.Sign(Robot.WhereAngles.Angle(2)), False, moderate_ji)
+            End If
         End If
 
         ' Move Robot
+        'Valid for PF300, PF400, DD4, DD6, C3, C5
         If (Robot.WhereAngles.angle(3) < 180) Then
             Move.OneAxis(3, 180-65, False, moderate_ji)
         Else
             Move.OneAxis(3, 180+65, False, moderate_ji)
         End If
 
-        ' Reset J4
-        If (Cmd.Rob.ThetaAxis <> 0) Then
-            If (Cmd.Rob.InactiveGripAxis <> 0) Then
-                If (Robot.WhereAngles.angle(3) < 180) Then
-                    Move.OneAxis(4, -90+45, False, moderate_ji)
+        If (rbType = DD6) Then
+            If (Math.Abs(Robot.WhereAngles.Angle(4)) > 5) Then
+                Move.OneAxis(4, 5 * Math.Sign(Robot.WhereAngles.Angle(4)), False, moderate_ji)
+            End If
+            Move.WaitForEOM
+
+            If (CurConfig And GPL_FLIP) Then 'In FLIP (wrist pitched up) change to NO_FLIP
+                Move.OneAxis(5, 90, False, moderate_ji)
+            End If
+            Move.WaitForEOM
+
+        End If
+
+
+        Select rbType
+        ' Reset J4 for PF300, PF400, C3, C5
+        Case PF300, PF400, C3, C5
+            If (Cmd.Rob.ThetaAxis <> 0) Then
+                If (Cmd.Rob.InactiveGripAxis <> 0) Then
+                    If (Robot.WhereAngles.angle(3) < 180) Then
+                        Move.OneAxis(4, -90+45, False, moderate_ji)
+                    Else
+                        Move.OneAxis(4, -90-45, False, moderate_ji)
+                    End If
                 Else
-                    Move.OneAxis(4, -90-45, False, moderate_ji)
+                    Move.OneAxis(4, -180, False, moderate_ji)
+                End If
+            End If
+        ' Reset J4 for DD4
+        Case DD4
+            If (Cmd.Rob.ThetaAxis <> 0) Then
+                If (Cmd.Rob.InactiveGripAxis <> 0) Then
+                    If (Robot.WhereAngles.angle(3) < 180) Then
+                        Move.OneAxis(4, 90 + 45, False, moderate_ji)
+                    Else
+                        Move.OneAxis(4, 90 -45, False, moderate_ji)
+                    End If
+                Else
+                    Move.OneAxis(4, 0, False, moderate_ji)
+                End If
+            End If
+
+        ' Reset Theta for the 6 axis arm
+        Case DD6
+            If Cmd.Rob.InactiveGripAxis <> 0 Then
+                If (CurConfig And GPL_Righty) Then ' In Righty changing to Lefty
+                    Move.OneAxis(6, -145, False, moderate_ji)
+                Else
+                    Move.OneAxis(6, 55, False, moderate_ji)
                 End If
             Else
-                Move.OneAxis(4, -180, False, moderate_ji)
+                Move.OneAxis(6, 0, False, moderate_ji)
             End If
-        End If
+            Move.WaitForEOM
+        End Select
 
         ' Move Robot to Safe position and then move beyond to change configuration.
         Move.Loc (safe_tmp, fast_ji)
 
-        If ((CurConfig = GPL_Righty)) Then  ' Change Righty to Lefty?
+        If (CurConfig And GPL_Righty) Then  ' Change Righty to Lefty?
             Move.Loc(lefty_tmp, fast_ji)    ' Lefty Zone Point
+
         Else                                ' Change Lefty to Righty
             Move.Loc(righty_tmp, fast_ji)
+
         End If
         Move.WaitForEOM
 
@@ -647,7 +851,12 @@ Module PARobot ' PARobot Robot Command Implementation Module
 ' Cmd_ChangeConfig2 -- Change robot configuration between right and lefty
 '
 ' ABSTRACT: Command to change Robot configuration between Righty and Lefty
-'           Function applicable only to PF400/PF300 Robots with a PreciseFlex
+'           Function applicable only to
+'           PF400/PF300/C3
+'           DD4/DD6
+'           C10/C8A
+'           C5
+'           Robots With a PreciseFlex
 '           Servo & Pneumatic Gripper
 '
 '           This routine doesn't includes check for collision inside
@@ -671,16 +880,19 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Dim lefty_tmp As New Location       ' Left Config Point
         Dim grip As Integer = Cmd.Rob.GripAxis
         Dim rb As Integer = Cmd.Rob.RobNum
+        Dim rbType As Integer = Cmd.Rob.RobType
         Dim ex As Exception
         Dim angles As Location
         Dim cloc As Location
         Dim j4 As Double
         Dim delta As Double
 
-        If (Cmd.Rob.RobType <> PF400) AndAlso (Cmd.Rob.RobType <> PF300) AndAlso (Cmd.Rob.RobType <> C3) Then
+        Select rbType
+        Case PF400, PF300, DD4, DD6, C3, C5
+        Case Else
             Reply =  EcInvRobType ' Invalid Robot Type
             Goto _exit
-        End If
+        End Select
 
         Cmd.StringToDouble(0)
 
@@ -734,92 +946,187 @@ Module PARobot ' PARobot Robot Command Implementation Module
         End If
         
         ' Get robot to safe position from which we can move to switch config
+        ' Specific to PF300, PF400, C3
+        If (rbType = PF300) OrElse (rbType = PF400) OrElse (rbType = C3) Then
+            If (Math.Abs(angles.Angle(2)) > 5) Then
+                delta = 5*Math.Sign(angles.Angle(2)) - angles.Angle(2)
+                angles.Angle(2) = angles.Angle(2) + delta
 
-        If (Math.Abs(angles.Angle(2)) > 5) Then
-            delta = 5*Math.Sign(angles.Angle(2)) - angles.Angle(2)
-            angles.Angle(2) = angles.Angle(2) + delta
-            ' Check if there is enough clearance to move J3
-            If Math.Abs(cloc.Y) > 300 Then
-                angles.Angle(3) = angles.Angle(3) - delta  ' Move J3 the opposite of J2
+                ' Check if there is enough clearance to move J3
+                If Math.Abs(cloc.Y) > 300 Then
+                    angles.Angle(3) = angles.Angle(3) - delta  ' Move J3 the opposite of J2
+                End If
+                Move.Loc(angles, moderate_ji) ' Move J2 and J3
             End If
-            Move.Loc(angles, moderate_ji) ' Move J2 and J3
         End If
-        
         
         ' Depending on the J4 angle, we can either move directly to -180 or
         ' we may need to unwind back to -180.
         ' Before we can unwind, need to move J3 for clearance.
                 
         'If there is a dual gripper attached
-        If (Cmd.Rob.InactiveGripAxis <> 0) Then
-            j4 = angles.Angle(4)
-            ' In Righty changing to Lefty
-            If CurConfig And GPL_Righty Then
-                ' Need to move J3
-                If angles.Angle(3) > (180-65) Then
-                    Move.OneAxis(3, 180-65, False, moderate_ji)
-                End If
-                ' Reset J4 if too far from -45
-                Move.OneAxis(4,  -90+45, False, moderate_ji)
-                
-                ' In Lefty changing to Righty
-            Else
-                ' Need to move J3
-                If angles.Angle(3) < (180+65) Then
-                    Move.OneAxis(3, 180+65, False, moderate_ji)
-                End If
-                ' Reset J4 if too far from -135
-                Move.OneAxis(4, -90-45, False, moderate_ji)
-            End If
-            Move.WaitForEOM
-            
-        Else    'Standard Servo Gripper
-            If (Cmd.Rob.ThetaAxis <> 0) Then
+        'Valid for PF300, PF400, C3, C5
+        If (rbType = PF300) OrElse (rbType = PF400) OrElse (rbType = C3) OrElse (rbType = C5) Then
+            If (Cmd.Rob.InactiveGripAxis <> 0) Then
                 j4 = angles.Angle(4)
-                
                 ' In Righty changing to Lefty
-                
                 If CurConfig And GPL_Righty Then
-                    If j4 > 0 OrElse j4 < -270 Then ' Need to move J3
-                        If angles.Angle(3) > (180-65) Then
-                            Move.OneAxis(3, 180-65, False, moderate_ji)
-                        End If
+                    ' Need to move J3
+                    If angles.Angle(3) > (180-65) Then
+                        Move.OneAxis(3, 180-65, False, moderate_ji)
                     End If
-                    
-                    ' In Lefty changing to Righty
-                    
+                    ' Reset J4 if too far from -45
+                    Move.OneAxis(4,  -90+45, False, moderate_ji)
+                ' In Lefty changing to Righty
                 Else
-                    If j4 < -360 OrElse j4 > -90 Then ' Need to move J3
-                        If angles.Angle(3) < (180+65) Then
-                            Move.OneAxis(3, 180+65, False, moderate_ji)
+                    ' Need to move J3
+                    If angles.Angle(3) < (180+65) Then
+                        Move.OneAxis(3, 180+65, False, moderate_ji)
+                    End If
+                    ' Reset J4 if too far from -135
+                    Move.OneAxis(4, -90-45, False, moderate_ji)
+                End If
+                Move.WaitForEOM
+            
+            Else    'Standard Servo Gripper
+                If (Cmd.Rob.ThetaAxis <> 0) Then
+                    j4 = angles.Angle(4)
+
+                    ' In Righty changing to Lefty
+
+                    If CurConfig And GPL_Righty Then
+                        If j4 > 0 OrElse j4 < -270 Then ' Need to move J3
+                            If angles.Angle(3) > (180-65) Then
+                                Move.OneAxis(3, 180-65, False, moderate_ji)
+                            End If
+                        End If
+
+                        ' In Lefty changing to Righty
+
+                    Else
+                        If j4 < -360 OrElse j4 > -90 Then ' Need to move J3
+                            If angles.Angle(3) < (180+65) Then
+                                Move.OneAxis(3, 180+65, False, moderate_ji)
+                            End If
                         End If
                     End If
-                End If
-                
-                ' Reset J4 if too far from -180
-                
-                If Math.Abs(j4+180) > 30 Then
-                    Move.OneAxis(4, -180, False, moderate_ji)
-                    
+
+                    ' Reset J4 if too far from -180
+
+                    If Math.Abs(j4+180) > 30 Then
+                        Move.OneAxis(4, -180, False, moderate_ji)
+
+                    End If
                 End If
             End If
+        End If
+
+        'DD4 robot type (dual gripper)
+        If (rbType = DD4) Then
+            If (Cmd.Rob.InactiveGripAxis <> 0) Then
+                j4 = angles.Angle(4)
+                ' In Righty changing to Lefty
+                If CurConfig And GPL_Righty Then
+                    ' Need to move J3
+                    If angles.Angle(3) > (180 - 65) Then
+                        Move.OneAxis(3, 180 - 65, False, moderate_ji)
+                    End If
+                    ' Reset J4
+                    Move.OneAxis(4, 90 + 65, False, moderate_ji)
+
+                    ' In Lefty changing to Righty
+                Else
+                    ' Need to move J3
+                    If angles.Angle(3) < (180 + 65) Then
+                        Move.OneAxis(3, 180 + 65, False, moderate_ji)
+                    End If
+                    ' Reset J4
+                    Move.OneAxis(4, 90 -65, False, moderate_ji)
+                End If
+                Move.WaitForEOM
+
+            Else    'Standard Servo Gripper
+                If (Cmd.Rob.ThetaAxis <> 0) Then
+                    j4 = angles.Angle(4)
+
+                    ' In Righty changing to Lefty
+
+                    If CurConfig And GPL_Righty Then
+                        If j4 > 90 OrElse j4 < -90 Then ' Need to move J3
+                            If angles.Angle(3) > (180 -65) Then
+                                Move.OneAxis(3, 180 -65, False, moderate_ji)
+                            End If
+                        End If
+
+                        ' In Lefty changing to Righty
+
+                    Else
+                        If j4 < -90 OrElse j4 > 90 Then ' Need to move J3
+                            If angles.Angle(3) < (180 + 65) Then
+                                Move.OneAxis(3, 180 + 65, False, moderate_ji)
+                            End If
+                        End If
+                    End If
+
+                    ' Reset J4 if too far from 0
+
+                    If Math.Abs(j4) > 30 Then
+                        Move.OneAxis(4, 0, False, moderate_ji)
+
+                    End If
+                End If
+            End If
+        End If
+
+        'DD6/C8A
+        If (rbType = DD6) Then
+            'Unfold J3
+            If (Robot.WhereAngles.angle(3) < 180) Then
+                Move.OneAxis(3, 180 -65, False, moderate_ji)
+            Else
+                Move.OneAxis(3, 180 + 65, False, moderate_ji)
+            End If
+
+            If (Math.Abs(Robot.WhereAngles.Angle(4)) > 5) Then
+                Move.OneAxis(4, 5 * Math.Sign(Robot.WhereAngles.Angle(4)), False, moderate_ji)
+            End If
+
+            If (CurConfig And GPL_FLIP) Then 'In FLIP (wrist pitched up) change to NO_FLIP
+                Move.ForceOverlap(0, 100)
+                Move.OneAxis(5, 90, False, moderate_ji)
+            End If
+
+            If CurConfig And GPL_Righty Then ' In Righty changing to Lefty
+                Move.OneAxis(3, 180 + 25, False, moderate_ji)
+                Move.ForceOverlap(0, 100)
+                Move.OneAxis(6, 0, True, moderate_ji)
+            Else                            ' In Lefty changing to Righty
+                Move.OneAxis(3, 180 - 25, False, moderate_ji)
+                Move.ForceOverlap(0, 100)
+                Move.OneAxis(6, 0, True, moderate_ji)
+            End If
+
         End If
         
         ' Move J3 to change config
         ' Robot is degenerate at 180 +/- 10 degrees
-        If CurConfig And GPL_Righty Then ' In Righty changing to Lefty
-            Move.OneAxis(3, 180+25, False, moderate_ji)
-            If Cmd.Rob.InactiveGripAxis <> 0 Then
-                Move.ForceOverlap(0, 100)
-                Move.OneAxis(4, -90, True, moderate_ji)
+
+        Select rbType
+        Case PF300, PF400, C3, DD4, C5
+            If CurConfig And GPL_Righty Then ' In Righty changing to Lefty
+                Move.OneAxis(3, 180+25, False, moderate_ji)
+                If Cmd.Rob.InactiveGripAxis <> 0 Then
+                    Move.ForceOverlap(0, 100)
+                    Move.OneAxis(4, -90, True, moderate_ji)
+                End If
+            Else                            ' In Lefty changing to Righty
+                Move.OneAxis(3, 180-25, False, moderate_ji)
+                If Cmd.Rob.InactiveGripAxis <> 0 Then
+                    Move.ForceOverlap(0, 100)
+                    Move.OneAxis(4, 90, True, moderate_ji)
+                End If
             End If
-        Else                            ' In Lefty changing to Righty
-            Move.OneAxis(3, 180-25, False, moderate_ji)
-            If Cmd.Rob.InactiveGripAxis <> 0 Then
-                Move.ForceOverlap(0, 100)
-                Move.OneAxis(4, 90, True, moderate_ji)
-            End If
-        End If
+        End Select
         Move.WaitForEOM
         
     _exit:
@@ -877,15 +1184,21 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Dim horiz_compliance As Boolean
         Dim horiz_pct As Double
         Dim theta As Integer
-        Dim is_pf400, is_pf300 As Boolean
+        Dim is_pf400, is_pf300, is_DD4, is_C3, is_C5 As Boolean
         Dim sta As Station
 
         Select Cmd.Rob.RobType
-        Case PF400, C3
+        Case PF400
             is_pf400 = True
         Case PF300
             is_pf300 = True
         Case PP100, PAVP6
+        Case DD4
+            is_DD4 = True
+        Case C3
+            is_C3 = True
+        Case C5
+            is_C5 = True
         Case Else
             Reply =  EcInvRobType       ' Invalid Robot Type
             Goto _exit
@@ -943,7 +1256,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
             ' Horizontal access station Like a Stocker/ Hotel
             ' Compute approach point in joint angles to force wrist to always
             ' be rotated away from the column.
-            If is_pf400 Then
+            If is_pf400 OrElse is_DD4 OrElse is_C3 OrElse is_C5 Then
                 tmploc = Plate_Loc_Cart.Mul(Location.XYZValue(0,0,-Plate_Loc_Cart.ZClearance))
             Else
                 Reply = EcInvPARobotStaType '*Invalid Station type*
@@ -954,7 +1267,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
             ' Vertical access station like a deck plate
             ' Compute approach point in joint angles to force wrist to always
             ' be rotated away from the column.
-            If is_pf400 Then
+            If is_pf400 OrElse is_DD4 OrElse is_C3 OrElse is_C5 Then
                 tmploc = Plate_Loc_Cart.Mul(Location.XYZValue(Plate_Loc_Cart.ZClearance,0,0))
             Else
                 tmploc = Plate_Loc_Cart.Mul(Location.XYZValue(0,0,-Plate_Loc_Cart.ZClearance))
@@ -970,7 +1283,11 @@ Module PARobot ' PARobot Robot Command Implementation Module
         
         appro_loc = tmploc.Kinesol(1)   ' Get appro jt angles
 
-        If theta <> 0 Then              ' Force Single
+        ' Force Single
+        ' normalizes the angle of the theta axis to a value between 0 and 359 degrees - (appro_loc.Angle(theta) Mod 360)
+        ' further adjusts the normalized angle to be within the range of -180 to 180 degrees
+        ' DD4/C10 ships with hard stop on J4, the code will be usefull if J4's range is extended
+        If theta <> 0 Then
             appro_loc.Angle(theta) = (appro_loc.Angle(theta) Mod 360)
             If (appro_loc.Angle(theta) > 180) Then
                 appro_loc.Angle(theta) -= 360
@@ -979,10 +1296,10 @@ Module PARobot ' PARobot Robot Command Implementation Module
             End If
         End If
         
-        ' For the PF400/PF300, if there is a Righty/Lefty change, move robot to
+        ' For the PF400/PF300/C3, if there is a Righty/Lefty change, move robot to
         ' the Park position.
 
-        If is_pf400 Or is_pf300 Then
+        If is_pf400 OrElse is_pf300 OrElse is_C3 Then
             If (theta <> 0) AndAlso ((Plate_Loc_Cart.config And GPL_Righty) = 0) Then
                 appro_loc.Angle(theta) -= 360   ' Force -180 to -540
             End If
@@ -994,6 +1311,35 @@ Module PARobot ' PARobot Robot Command Implementation Module
             If ((Robot.Where.Config Xor Plate_Loc_Cart.Config) And GPL_Righty) Then
                 park_j_loc = Park_j(rb).Clone
                 park_j_loc.Angle(1) = (Robot.DestAngles.Angle(1)+appro_loc.Angle(1))/2
+                If Cmd.Rob.GripAxis <> 0 Then
+                    park_j_loc.Angle(Cmd.Rob.GripAxis) = GRIP_OPEN(rb)
+                End If
+
+                ' Move rail
+                If Cmd.Rob.RailAxis <> 0 Then
+                    park_j_loc.Angle(Cmd.Rob.RailAxis) = rail
+                End If
+
+                Move.Loc(park_j_loc, moderate_ji)
+            End If
+        End If
+
+        ' appro_loc.Angle(theta) is already normalized between -180 and 180
+        ' DD4/C10 J4's limit is -300 to 300
+        If is_DD4 Or is_C5 Then
+
+            If is_C5 Then
+                If (theta <> 0) AndAlso ((Plate_Loc_Cart.config And GPL_Righty) = 0) Then
+                    appro_loc.Angle(theta) -= 360   ' Force -180 to -540
+                End If
+            End If
+
+            ' Move to the park position if robot is changing RIGHTY / LEFTY arm configurations
+            ' Adjust Z height of park to be midway between where we are and were we are going.
+
+            If ((Robot.Where.Config Xor Plate_Loc_Cart.Config) And GPL_Righty) Then
+                park_j_loc = Park_j(rb).Clone
+                park_j_loc.Angle(2) = (Robot.DestAngles.Angle(2) + appro_loc.Angle(2)) / 2
                 If Cmd.Rob.GripAxis <> 0 Then
                     park_j_loc.Angle(Cmd.Rob.GripAxis) = GRIP_OPEN(rb)
                 End If
@@ -1062,7 +1408,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
             AC_HorizCompliance2(rb, False, 0) ' Disable compliance
         End If      
 
-        ' If PF400 and picking up from stack or hotel, lift off in Z by z_above.
+        ' picking up from stack or hotel, lift off in Z by z_above.
     
         nest_high = Plate_Loc_Cart.clone    ' Position above nest
         If (sta.flags And STA_FL_VERT) = 0 Then
@@ -1074,10 +1420,10 @@ Module PARobot ' PARobot Robot Command Implementation Module
         ' the robot type, ZClearance and z_grasp_offset.
 
         nest_high.ZWorld = False                ' Always do tool relative depart
-        If (sta.flags And STA_FL_VERT) = 0 Then ' PF400 operating on stack or hotel
+        If (sta.flags And STA_FL_VERT) = 0 Then ' PF400,DD4,C10,C3, C5 operating on stack or hotel
             nest_high.ZClearance += sta.z_grasp_offset ' Increase due to plate in hand
         Else                                    ' Deck plate
-            If is_pf400 Then
+            If is_pf400 OrElse is_DD4 OrElse is_C3 OrElse is_C5 Then
                 nest_high = nest_high.Mul(Location.XYZValue( _
                                         nest_high.ZClearance+sta.z_grasp_offset,0,0))
                 nest_high.ZClearance = 0
@@ -1163,15 +1509,21 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Dim horiz_compliance As Boolean
         Dim horiz_pct As Double
         Dim theta As Integer
-        Dim is_pf400, is_pf300 As Boolean
+        Dim is_pf400, is_pf300, is_DD4, is_C3, is_C5 As Boolean
         Dim sta As Station
 
         Select Cmd.Rob.RobType
-        Case PF400, C3
+        Case PF400
             is_pf400 = True
         Case PF300
             is_pf300 = True
         Case PP100, PAVP6
+        Case DD4
+            is_DD4 = True
+        Case C3
+            is_C3 = True
+        Case C5
+            is_C5 = True
         Case Else
             Reply =  EcInvRobType       ' Invalid Robot Type
             Goto _exit
@@ -1232,7 +1584,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
             ' Horizontal access station Like a Stocker/ Hotel
             ' Compute approach point in joint angles to force wrist to always
             ' be rotated away from the column.
-            If is_pf400 Then
+            If is_pf400 OrElse is_DD4 OrElse is_C3 OrElse is_C5 Then
                 nest_high.XYZInc(0,0,sta.z_above)' Move slighty above horizontal nest
                 tmploc = nest_high.Mul(Location.XYZValue(0,0,-appro_offset))
             Else
@@ -1244,7 +1596,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
             ' Vertical access station like a deck plate
             ' Compute approach point in joint angles to force wrist to always
             ' be rotated away from the column.
-            If is_pf400 Then
+            If is_pf400 OrElse is_DD4 OrElse is_C3 OrElse is_C5 Then
                 tmploc = nest_high.Mul(Location.XYZValue(appro_offset,0,0))
             Else
                 tmploc = nest_high.Mul(Location.XYZValue(0,0,-appro_offset))
@@ -1260,7 +1612,11 @@ Module PARobot ' PARobot Robot Command Implementation Module
         
         appro_loc = tmploc.Kinesol(1)   ' Get appro jt angles
 
-        If theta <> 0 Then              ' Force Single
+        ' Force Single
+        ' normalizes the angle of the theta axis to a value between 0 and 359 degrees - (appro_loc.Angle(theta) Mod 360)
+        ' further adjusts the normalized angle to be within the range of -180 to 180 degrees
+        ' DD4/C10 ships with hard stop on J4, the code will be usefull if J4's range is extended
+        If theta <> 0 Then
             appro_loc.Angle(theta) = (appro_loc.Angle(theta) Mod 360)
             If (appro_loc.Angle(theta) > 180) Then
                 appro_loc.Angle(theta) -= 360
@@ -1269,10 +1625,10 @@ Module PARobot ' PARobot Robot Command Implementation Module
             End If
         End If
         
-        ' For the PF400/PF300, if there is a Righty/Lefty change, move robot to
+        ' For the PF400/PF300/C3, if there is a Righty/Lefty change, move robot to
         ' the Park position.
 
-        If is_pf400 Or is_pf300 Then
+        If is_pf400 OrElse is_pf300 OrElse is_C3 Then
             If (theta <> 0) AndAlso ((nest_high.config And GPL_Righty) = 0) Then
                 appro_loc.Angle(theta) -= 360   ' Force -180 to -540
             End If
@@ -1284,6 +1640,34 @@ Module PARobot ' PARobot Robot Command Implementation Module
             If ((Robot.Where.Config Xor nest_high.Config) And GPL_Righty) Then
                 park_j_loc = Park_j(rb).Clone
                 park_j_loc.Angle(1) = (Robot.DestAngles.Angle(1)+appro_loc.Angle(1))/2
+                If Cmd.Rob.GripAxis <> 0 Then
+                    park_j_loc.Angle(Cmd.Rob.GripAxis) = GRIP_CLOSE(rb)
+                End If
+
+                ' Move rail
+                If Cmd.Rob.RailAxis <> 0 Then
+                    park_j_loc.Angle(Cmd.Rob.RailAxis) = rail
+                End If
+
+                Move.Loc(park_j_loc, moderate_ji)
+            End If
+        End If
+
+        ' DD4/C10 J4's limit is -300 to 300
+        If is_DD4 OrElse is_C5 Then
+
+            If is_C5 Then
+                If (theta <> 0) AndAlso ((nest_high.config And GPL_Righty) = 0) Then
+                    appro_loc.Angle(theta) -= 360   ' Force -180 to -540
+                End If
+            End If
+
+            ' Move to the park position if robot is changing RIGHTY / LEFTY arm configurations
+            ' Adjust Z height of park to be midway between where we are and were we are going.
+
+            If ((Robot.Where.Config Xor nest_high.Config) And GPL_Righty) Then
+                park_j_loc = Park_j(rb).Clone
+                park_j_loc.Angle(2) = (Robot.DestAngles.Angle(2) + appro_loc.Angle(2)) / 2
                 If Cmd.Rob.GripAxis <> 0 Then
                     park_j_loc.Angle(Cmd.Rob.GripAxis) = GRIP_CLOSE(rb)
                 End If
@@ -1366,7 +1750,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Else
             ' Deck or Vertical Stations
             ' Nest Location Clearance
-            If is_pf400 Then
+            If is_pf400 OrElse is_DD4 OrElse is_C3 OrElse is_C5 Then
                 ' Set Z value for depart, no longer grasping part
                 tmploc = tmploc.Mul(Location.XYZValue(tmploc.ZClearance,0,0))
                 tmploc.ZClearance = 0
@@ -1418,7 +1802,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Dim ZClr As Double =  Z_CLEARANCE ' Default Value for Z Clearance
 
         Select Cmd.Rob.RobType
-        Case PF400, PF300, PP100, PAVP6, C3
+        Case PF400, PF300, PP100, PAVP6, DD4, C3, C5
         Case Else
             Reply =  EcInvRobType       ' Invalid Robot Type
             Goto _exit
@@ -1884,7 +2268,7 @@ Module PARobot ' PARobot Robot Command Implementation Module
         Dim tmpLoc As Location
 
         Select Cmd.Rob.RobType
-        Case PF400, PF300, PP100, PAVP6, C3
+        Case PF400, PF300, PP100, PAVP6, DD4, C3, C5
         Case Else
             Reply =  EcInvRobType ' Invalid Robot Type
             Goto _exit
@@ -2580,7 +2964,7 @@ Module SSGrip
 '
 ' ##################   GLOBAL VARIABLES AND DECLARATIONS   ###################
 
-    Private Const Version As String = "SSGrip Module 3.0D3 10-23-2024"
+    Private Const Version As String = "SSGrip Module 3.0D4 10-25-2024"
     
     'Customization
 
@@ -3196,7 +3580,7 @@ Module SSGrip
             Goto _exit
         End If
 
-        If Cmd.Rob.RobType <> PF400 Then
+        If (Cmd.Rob.RobType <> PF400) AndAlso (Cmd.Rob.RobType <> C3) Then
             Reply = EcInvPARobotNoSnsr  ' No gripper close sensor
             Goto _exit
         End If
@@ -3366,7 +3750,7 @@ Module SSGrip
     Public Sub Cmd_IsFullyClosed(ByVal Cmd As Command, ByRef Reply As String)
         Dim bTmp As Integer
   
-        If Cmd.Rob.RobType = PF400 Then
+        If (Cmd.Rob.RobType = PF400) OrElse (Cmd.Rob.RobType = C3) Then
             bTmp = IsFullyClosed(Cmd)
             If (Cmd.Rob.InactiveGripAxis <> 0) Then 'Is Dual Gripper
                 If bTelnetMode Then
