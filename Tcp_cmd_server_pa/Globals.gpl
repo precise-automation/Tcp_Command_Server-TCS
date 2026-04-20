@@ -1,6 +1,6 @@
 ' Command Server
 
-' Copyright (c) 2024 by Brooks Automation.
+' Copyright (c) 2025 by Brooks Automation.
 ' All rights reserved.
 ' =======================================================================
 ' Permission is granted to customers of Brooks Automation to use this
@@ -17,7 +17,7 @@
 Module Globals 'Declare global variables for project here.
 
     ' VERSION STRING
-    Public Version As String = "Command Server 3.0D4 10-25-2024"
+    Public Version As String = "Command Server 3.0D5 12-09-2025"
 
     ' -- Debug operation flag.
     ' 0 = no trace messages
@@ -77,7 +77,7 @@ Module Globals 'Declare global variables for project here.
     Public Const EcUndefSta As String = "-2821 *Undefined station*"
     Public Const EcNotPallet As String = "-2822 *Not a pallet*"
     Public Const EcNotOrigin As String = "-2823 *Not at pallet origin*"
-
+    Public Const EcNotSuppRob As String = "-2824 *Not supported by this robot*"
     Public Const EcInvPARobotInvSta As String = "-2852 *Invalid robot state to execute command*"
 
     ' User-friendly State and SysState values

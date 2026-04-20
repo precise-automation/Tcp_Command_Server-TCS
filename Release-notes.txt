@@ -1,5 +1,12 @@
 Release notes for TCP Command Server
 
+TCP Command Server 3.0D5, December 9, 2025
+
+	o Add support for dual gripper with C5 robot.
+	  Note: ChangeConfig2 command does not support dual gripper on C5.
+
+	o Add support for PWM brake in ReleaseBrake command.
+
 TCP Command Server 3.0D4, October 25, 2024
 	Supersedes 3.0D3 built 2 days ago.
 
@@ -13,7 +20,7 @@ TCP Command Server 3.0D4, October 25, 2024
 
 	  GetActiveGripper, GraspPlate, IsFullyClosed, ReleasePlate,
 	  SetActiveGripper, TeachPlate,
-
+1
 TCP Command Server 3.0D3, October 23, 2024
 
 	o Add height-detect support for PreciseFlex c3, c5,

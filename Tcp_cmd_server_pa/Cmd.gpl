@@ -1,6 +1,6 @@
 #Region "Module Cmd"
 
-' Copyright (c) 2023 by Brooks Automation.
+' Copyright (c) 2025 by Brooks Automation.
 ' All rights reserved.
 ' =======================================================================
 ' Permission is granted to customers of Brooks Automation to use this
@@ -1610,10 +1610,11 @@ Module Cmd
 '  Parameter 1: The number of the axis to release.
 
     Public Sub Cmd_ReleaseBrake(ByVal Cmd As Command, ByRef Reply As String)
-        Cmd.StringToDouble(0)
         If Cmd.Nparm > 0 Then
-            Controller.PDbNum(14500, Cmd.Rob.RobNum, 0, 0) = Cmd.cData(1) ' Axis
-            Controller.PDbNum(14002, Cmd.Rob.RobNum, 0, 0) = 1  'release brake
+            ' Servo commands to release brake and handle any PWM brake control
+            ' As of 250131 should be compatible with all PCR robots.
+            Controller.PDb(11000, Cmd.Rob.RobNum) = "15012 1 " & Cmd.sData(1)
+            Controller.PDb(11000, Cmd.Rob.RobNum) = "15012 3 " & Cmd.sData(1)
         End If
     End Sub
 #End Region
