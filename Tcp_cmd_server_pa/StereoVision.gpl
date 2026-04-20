@@ -1,0 +1,323 @@
+' Copyright (c) 2024 by Brooks Automation.  All rights reserved.
+' =======================================================================
+' Permission is granted to customers of Brooks Automation to use this
+' software for any purpose, including commercial applications, and to
+' alter it and redistribute it freely, so long as this notice is included
+' with any modified or unmodified version of this software.
+'
+' This software is provided "as is," without warranty of any kind, express or
+' implied.  In no event shall Brooks Automation be held liable for any
+' direct, indirect, incidental, special or consequential damages arising
+' out of the use of or inability to use this software.
+' =======================================================================
+
+''' <summary>
+''' Manages the Stereoscopic Vision Extensions for TCS
+''' </summary>
+''' <remarks>
+''' This extends new vision functionality required by the support for Intelligrip.
+''' It leverages existing vision concepts defined in the Global.gpl module
+''' </remarks>
+Module StereoVision
+
+	Private Const Version As String = "IntelliGuide 1.0 05-22-2024"
+
+	''' <summary>
+	''' Array of stereo-locators. 
+	''' </summary>
+	''' <remarks>The first index is the robot number. The second index is the camera number</remarks>
+	Private locator(, ) As StereoLocator
+
+	''' <summary>
+	''' Perform module initialization 
+	''' </summary>
+	Public Sub Init()
+		Command.AddPlugin(Version, "IntelliGuide")
+		ReDim locator(N_Rob, 2)
+	End Sub
+
+	''' <summary>
+	''' This routine is called after a new command object is created for a robot. 
+	''' It modifies the command object and builts local data structures. 
+	''' </summary>
+	''' <param name="Cmd">The new Command object, filled in by the command New sub.</param>
+	''' <param name="Reply">A dummy string, not used.</param>
+	Public Sub Hook_InitCommand(ByVal Cmd As Command, ByRef Reply As String)
+	End Sub
+
+	''' <summary>
+	''' Get or set a PreciseVision vision tool property value 
+	''' </summary>
+	''' <param name="Cmd">An object of the class "Command" which contains the parsed command message from the remote client.</param>
+	''' <param name="Reply">The string sent to the client in response to this command.</param>
+	''' <remarks> 
+	''' 
+	''' Read or writes the property of a vision tool. If parameter 3 is not specified, it is a read request. 
+	''' If parameter 3 is specified, it is a write request. 
+	''' 
+	''' The parameters are as follows:
+	''' Parameter 1: The name of the vision tool in the project
+	''' Parameter 2: The name of the property to read or write
+	''' Parameter 3: (optional) If specified, the value of the property to set. If ommitted, the
+	''' 				parameter value will be read.
+	''' 
+	''' </remarks>
+	Public Sub Cmd_VToolProperty(ByVal Cmd As Command, ByRef Reply As String)
+
+		' Validate the number of parameters
+		If (Cmd.Nparm <> 2 And Cmd.Nparm <> 3) Then
+			Reply = EcPmm
+			Return
+		End If
+
+		' Get Name of the vision tool reference
+		Dim toolName As String = Cmd.sData(1)
+		Dim propertyName As String = Cmd.sData(2)
+		Dim referenceName As String = toolName + "." + propertyName
+
+		' If we are writing the value
+		If (Cmd.Nparm = 3) Then
+			Dim setValue As String = Cmd.sData(3)
+			glbVision.ToolProperty(referenceName) = setValue
+
+			If bTelnetMode Then
+				Reply = "Value Set = " + setValue
+			Else
+				Reply = "0"
+			End If
+		Else
+			Reply = glbVision.ToolProperty(referenceName)
+
+			If bTelnetMode Then
+				Reply = "Current Value = " + Reply
+			End If
+		End If
+
+	End Sub
+
+	''' <summary>
+	''' Gets the Vision result string information 
+	''' </summary>
+	''' <param name="Cmd">An object of the class "Command" which contains the parsed command message from the remote client.</param>
+	''' <param name="Reply">The string sent to the client in response to this command.</param>
+	''' <remarks> 
+	''' 
+	''' Reads the vision result string. If no arguments are specified, the result is from the last 
+	''' vision process executed. If arguments are specified, the specific result is returned.
+	''' 
+	''' The parameters are as follows:
+	''' 
+	''' Parameter 1: (Optional) The vision tool to access
+	''' Parameter 2: (Optional) The result number to access if arg1 is specified.
+	''' 
+	''' </remarks>
+	Public Sub Cmd_VresultInfoString(ByVal Cmd As Command, ByRef Reply As String)
+
+		Dim ex As Exception
+
+		If Cmd.Nparm = 0 Then
+			glbVisResult = glbVision.Result()
+		ElseIf Cmd.Nparm  > 1 Then
+			glbVisResult = glbVision.Result(Cmd.sData(1), CInt(Cmd.sData(2)))
+		Else
+			reply = EcPmm               'Warning Parameter Mismatch
+			GoTo _exit
+		End If
+
+		If bTelnetMode Then
+			ex = New Exception
+			ex.ErrorCode = glbVisResult.ErrorCode
+			If ex.ErrorCode < 0 Then
+				reply = CStr(ex.ErrorCode) & " " & ex.Message
+				GoTo _exit
+			End If
+			reply = "Vision info = "
+		Else
+			reply = CStr(glbVisResult.ErrorCode) & " "
+			If glbVisResult.ErrorCode < 0 Then
+				GoTo _exit
+			End If
+		End If
+
+		reply &= " " & glbVisResult.InfoString
+
+		_exit :
+		Return
+
+	End Sub
+
+	''' <summary>
+	''' Get or Set the Stereo Location Parameters
+	''' </summary>
+	''' <param name="Cmd">An object of the class "Command" which contains the parsed command message from the remote client.</param>
+	''' <param name="Reply">The string sent to the client in response to this command.</param>
+	''' <remarks> 
+	''' 
+	''' Read or write the stereoscopic parameters. If only parameter 1 and parameter 2 are supplied, 
+	''' it will read the parameters. If more are specified, it is considered a write operation. 
+	''' When writing the parameters, all parameters must be specified.
+	''' 
+	''' The parameters are as follows:
+	''' 
+	''' Parameter 1: The robot number (starting at 1)
+	''' Parameter 2: The camera number. 
+	''' 				1 = Front Facing
+	''' 				2 = Downward Facing
+	''' Parameter 3: (Optional) Set the Vision Process Name
+	''' Parameter 4: (Optional) Set the Vision Tool Name
+	''' Parameter 5: (Optional) Set the Optimum Distance To Target
+	''' Parameter 6: (Optional) Set the Optimum Window Scale Factor
+	''' Parameter 7: (Optional) Set the Wrist Axis Index
+	''' Parameter 8: (Optional) Set the Aruco 1 Number
+	''' Parameter 9: (Optional) Set the Aruco 2 Number
+	''' Parameter 10: (Optional) Set the Distance Between Arucos
+	''' Parameter 11: (Optional) Set the Maximum Aruco Distance Estimated Error
+	''' Parameter 12: (Optional) Set the wait time between pictures
+	''' 
+	''' </remarks>
+	Public Sub Cmd_StereoParam(ByVal Cmd As Command, ByRef Reply As String)
+
+		If (Cmd.Nparm <> 2) And (Cmd.Nparm <> 12) Then
+			Reply = EcPmm
+			Return
+		End If
+
+		Dim robotNumber As Integer = CInt(Cmd.sData(1))
+		Dim cameraNumber As Integer = CInt(Cmd.sData(2))
+
+		Dim stereoLocator As StereoLocator
+		Dim status As Integer
+
+		status = GetStereoLocator(robotNumber, cameraNumber, stereoLocator)
+		If (status <> 0) Then
+			Reply = CStr(status)
+			Return
+		End If
+
+		If (Cmd.Nparm = 2) Then
+			Reply = "0 "
+			Reply += FormatResponse("ProcessName", stereoLocator.ProcessName)
+			Reply += FormatResponse("ToolName", stereoLocator.ToolName)
+			Reply += FormatResponse("OptimumDistanceToTarget", CStr(stereoLocator.OptimumDistanceToTarget))
+			Reply += FormatResponse("OptimumWindowScaleFactor", CStr(stereoLocator.OptimumWindowScaleFactor))
+			Reply += FormatResponse("WristAxisIdx", CStr(stereoLocator.WristAxisIdx))
+			Reply += FormatResponse("Aruco1Num", CStr(stereoLocator.Aruco1Num))
+			Reply += FormatResponse("Aruco2Num", CStr(stereoLocator.Aruco2Num))
+			Reply += FormatResponse("DistanceBetweenArucos", CStr(stereoLocator.DistanceBetweenArucos))
+			Reply += FormatResponse("MaxArucoDistEstErr", CStr(stereoLocator.MaxArucoDistEstErr))
+			Reply += FormatResponse("WaitMsecs", CStr(stereoLocator.WaitMsecs))
+		Else
+			stereoLocator.ProcessName = Cmd.sData(3)
+			stereoLocator.ToolName = Cmd.sData(4)
+			stereoLocator.OptimumDistanceToTarget = CDbl(Cmd.sData(5))
+			stereoLocator.OptimumWindowScaleFactor = CDbl(Cmd.sData(6))
+			stereoLocator.WristAxisIdx = CDbl(Cmd.sData(7))
+			stereoLocator.Aruco1Num = CInt(Cmd.sData(8))
+			stereoLocator.Aruco2Num = CDbl(Cmd.sData(9))
+			stereoLocator.DistanceBetweenArucos = CDbl(Cmd.sData(10))
+			stereoLocator.MaxArucoDistEstErr = CDbl(Cmd.sData(11))
+			stereoLocator.WaitMsecs = CInt(Cmd.sData(12))
+			Reply = "0"
+		End If
+
+	End Sub
+
+	''' <summary>
+	''' Runs the Stereo Location operation
+	''' </summary>
+	''' <param name="Cmd">An object of the class "Command" which contains the parsed command message from the remote client.</param>
+	''' <param name="Reply">The string sent to the client in response to this command.</param>
+	''' <remarks> 
+	''' 
+	''' Perform a stereo location for the specified robot and camera.
+	''' 
+	''' The parameters are as follows:
+	''' 
+	''' Parameter 1: Robot Number (starting at 1).
+	''' Parameter 2: The camera number.
+	''' 				1 = Front Facing
+	''' 				2 = Downward Facing
+	''' 
+	''' </remarks>
+	Public Sub Cmd_StereoLocate(ByVal Cmd As Command, ByRef Reply As String)
+
+		If (Cmd.Nparm <> 2) Then
+			Reply = EcPmm
+			Return
+		End If
+
+		Dim robotNumber As Integer = CInt(Cmd.sData(1))
+		Dim cameraNumber As Integer = CInt(Cmd.sData(2))
+
+		Dim stereoLocator As StereoLocator
+		Dim status As Integer
+
+		status = GetStereoLocator(robotNumber, cameraNumber, stereoLocator)
+		If (status <> 0) Then
+			Reply = CStr(status)
+			Return
+		End If
+
+		Dim visionTargetLocation As Location
+		visionTargetLocation = stereoLocator.LocateTargetStereoDualArucos()
+
+		Reply = sCartesian("0", visionTargetLocation, 3)
+
+	End Sub
+
+	''' <summary>
+	''' Gets the Stereo Locator for the specified Robot and Camera Number
+	''' </summary>
+	''' <param name="robotNumber">The robot number (starting at 1)</param>
+	''' <param name="cameraNumber">The camera number (starting at 1)</param>
+	''' <param name="stereoLocator">The matching stereo locator</param>
+	''' <returns>Was the operation successful. 0 = Success</returns>
+	Private Function GetStereoLocator(ByVal robotNumber As Integer, ByVal cameraNumber As Integer, ByRef stereoLocator As StereoLocator) As Integer
+
+		stereoLocator = Nothing
+
+		If (cameraNumber < 1 OrElse cameraNumber > 2) Then
+			Return EcPmm
+		End If
+
+		Dim robotIndex As Integer = robotNumber -1
+		Dim cameraIndex As Integer = cameraNumber -1
+		
+		If (locator(robotIndex, cameraIndex) Is Nothing) Then
+			stereoLocator = New StereoLocator(cameraNumber, robotNumber)
+			stereoLocator.ProcessName = "unknown_process"
+			stereoLocator.ToolName = "unknown_tool"
+			stereoLocator.Aruco1Num = 2
+			stereoLocator.Aruco2Num = 3
+			stereoLocator.WaitMsecs = 1000
+			stereoLocator.DistanceBetweenArucos = 63
+			stereoLocator.OptimumWindowScaleFactor = 0.5
+			stereoLocator.OptimumDistanceToTarget = 150
+			stereoLocator.NumAttemptsToFindArucoPos = 2
+			stereoLocator.NumAttemptsToReachTargetPos = 2
+			stereoLocator.MaxArucoDistEstErr = 2
+			stereoLocator.WristAxisIdx = 4 
+			
+			locator(robotIndex, cameraIndex) = stereoLocator 
+		Else
+			stereoLocator = locator(robotIndex, cameraIndex)
+		End If		
+
+		Return 0
+
+	End Function
+
+	''' <summary>
+	''' Format a response taking into account the Telnet mode
+	''' </summary>
+	''' <param name="responseDescription">The description of the parameter to use in Telnet mode</param>
+	''' <param name="value">The parameter value</param>
+	''' <returns>The formatted parameter text</returns>
+	Private Function FormatResponse(ByVal responseDescription As String, ByVal value As String) As String
+		If bTelnetMode Then
+			Return responseDescription + " = " + value +  Chr(GPL_CR) & Chr(GPL_LF)
+		Else
+			Return value + " "
+		End If
+	End Function
+End Module

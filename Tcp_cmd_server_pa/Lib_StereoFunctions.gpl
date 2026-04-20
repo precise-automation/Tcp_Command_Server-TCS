@@ -1,0 +1,340 @@
+' Copyright (c) 2024 by Brooks Automation.  All rights reserved.
+' =======================================================================
+' Permission is granted to customers of Brooks Automation to use this
+' software for any purpose, including commercial applications, and to
+' alter it and redistribute it freely, so long as this notice is included
+' with any modified or unmodified version of this software.
+'
+' This software is provided "as is," without warranty of any kind, express or
+' implied.  In no event shall Brooks Automation be held liable for any
+' direct, indirect, incidental, special or consequential damages arising
+' out of the use of or inability to use this software.
+' =======================================================================
+
+Module StereoFunctions
+	Dim RT0 As New Location
+
+	''' <summary>
+	''' Look to see if a location is null (all zero values) in
+	''' X,Y,Z,yaw,pitch,roll
+	''' </summary>
+	''' <param name="nLoc">The location to check</param>
+	''' <returns>Is the location null</returns>
+	Public Function LocIsNull(ByVal nLoc As Location) As Boolean
+		Dim isNull As Boolean = True
+
+		If nLoc.Type = 0 Then
+			If nLoc.X <> 0 Then
+				isNull = False
+			ElseIf nLoc.Y <> 0 Then
+				isNull = False
+			ElseIf nLoc.Z <> 0 Then
+				isNull = False
+			ElseIf nLoc.Yaw <> 0 Then
+				isNull = False
+			ElseIf nLoc.Pitch <> 0 Then
+				isNull = False
+			ElseIf nLoc.roll <> 0 Then
+				isNull = False
+			End If
+
+		Else
+
+			If nLoc.Angle(1) <> 0 Then
+				isNull = False
+			ElseIf nLoc.Angle(2) <> 0 Then
+				isNull = False
+			ElseIf nLoc.Angle(3) <> 0 Then
+				isNull = False
+			ElseIf nLoc.Angle(4) <> 0 Then
+				isNull = False
+			End If
+
+		End If
+
+		Return isNull
+
+	End Function
+
+	''' <summary>
+	''' Clone the primary properties of a reference frame
+	' object.
+	''' </summary>
+	''' <param name="inRefFrame">The reference frame to clone</param>
+	''' <returns>A copy of the reference frame</returns>
+	Public Function CloneRefFrame(ByVal inRefFrame As RefFrame) As RefFrame
+
+		Dim oFrame As New RefFrame
+		oFrame.Type = inRefFrame.Type
+
+		oFrame.Loc.X = InRefFrame.Loc.X
+		oFrame.Loc.Y = InRefFrame.Loc.Y
+		oFrame.Loc.Z = InRefFrame.loc.Z
+		oFrame.Loc.Yaw = InRefFrame.loc.Yaw
+		oFrame.Loc.Pitch = InRefFrame.loc.pitch
+		oFrame.Loc.roll = InRefFrame.loc.roll
+		oFrame.Loc.ZWorld = InRefFrame.loc.ZWorld
+
+		Return oFrame
+	End Function
+
+	''' <summary>
+	''' Print a location value to the console
+	''' </summary>
+	''' <param name="str">A prefix string to print before the location</param>
+	''' <param name="loc">The location to print</param>
+	Public Sub PrintLoc(ByVal str As String, ByVal loc As Location)
+		If str = "" Then
+			Console.WriteLine("X = " & CStr(loc.X) & ", Y = " & CStr(loc.Y) & ", Z = " & CStr(loc.Z) & ", Yaw = " & CStr(loc.Yaw))
+		Else
+			Console.WriteLine(str & ": X = " & CStr(loc.X) & ", Y = " & CStr(loc.Y) & ", Z = " & CStr(loc.Z) & ", Yaw = " & CStr(loc.Yaw))
+		End If
+	End Sub
+	
+	''' <summary>
+	''' Write the text to the console window
+	''' </summary>
+	''' <param name="text">The text to write</param>
+	''' <remarks>
+	''' The wizard framework in the UI looks for the prefix to know 
+	''' what messages to include in the display
+	''' </remarks>
+	Public Sub WriteToCalibrationDisplay(ByVal text As String)
+		Console.WriteLine("[S]" + text)
+		'Controller.SystemMessage(text)
+	End Sub
+	
+	''' <summary>
+	''' Calculate the position offset from the specific position
+	''' </summary>
+	''' <param name="loc0">The location to calculate relative to</param>
+	''' <param name="dX">The X vector offset</param>
+	''' <param name="dY">The Y vector offset</param>
+	''' <param name="dZ">The Z vector offset</param>
+	''' <returns></returns>
+	Public Function GetToolRelXYZ(ByVal loc0 As Location, ByVal dX As Double, _
+		ByVal dY As Double, ByVal dZ As Double) As Location
+		Dim loc As New Location
+		Dim rt As New Location
+		
+		loc = GetToolRelXYZ(loc0, dX, dY, dZ, Robot.Tool)
+		Return loc
+		
+	End Function
+		
+	''' <summary>
+	''' Calculate the position offset from the specific position
+	''' </summary>
+	''' <param name="loc0">The location to calculate relative to</param>
+	''' <param name="dX">The X vector offset</param>
+	''' <param name="dY">The Y vector offset</param>
+	''' <param name="dZ">The Z vector offset</param>
+	''' <returns></returns>
+	Public Function GetToolRelXYZ(ByVal loc0 As Location, ByVal dX As Double, _
+		ByVal dY As Double, ByVal dZ As Double, ByVal toolTransform As Location) As Location
+		Dim loc As New Location
+		Dim rt As New Location
+		
+		rt = toolTransform.Clone()
+		loc = loc0.Mul(rt.Inverse)		
+		loc = loc.Mul(RT0) ' robot relative XYZ motions are 'standard' now (up, RtoL & forward are all positive) 		
+		
+		Dim theta As Double = loc.Yaw * Math.PI / 180.0
+
+		' tool delta Z		
+		loc.X = loc.X + dZ * Math.Cos(theta)
+		loc.Y = loc.Y + dZ * Math.Sin(theta)
+
+		' tool delta Y			
+		loc.X = loc.X + dY * Math.Cos(theta - Math.PI / 2.0)
+		loc.Y = loc.Y + dY * Math.Sin(theta - Math.PI / 2.0)
+
+		' tool delta X			
+		loc.Z = loc.Z + dX
+
+		loc = loc.Mul(RT0.Inverse)		
+		loc = loc.Mul(rt) 	' location set back to customer tool transform
+		
+		Return loc
+	End Function
+
+	''' <summary>
+	''' Return a number to two decimal digits
+	''' </summary>
+	''' <param name="d">The number</param>
+	''' <returns>The value with two decimal digits</returns>
+	Public Function TwoDecim(ByVal d As Double) As Double
+		Return (Math.Ceiling(d*100.0)/100.0)
+	End Function
+
+	''' <summary>
+	''' Calculate the position of the camera in tool center point coordinates
+	''' </summary>
+	''' <param name="loc0">The location to transform</param>
+	''' <param name="cameraNumber">The camera number used to calculate</param>
+	''' <returns>The calculated position</returns>
+	Public Function CameraLocToTCP(ByVal loc0 As Location, ByVal cameraNumber As Integer) As Location	
+		Dim loc As New Location
+		Dim rt As New Location
+		Dim cameraTool As New Location
+		
+		rt = Robot.Tool
+		cameraTool = getCameraToolTransform(cameraNumber)		
+		
+		loc = loc0.Mul(cameraTool.Inverse)		
+		loc = loc.Mul(rt)
+		
+		Return loc
+	End Function
+
+	''' <summary>
+	''' Calculate the position of the tool center point in camera coordinates
+	''' </summary>
+	''' <param name="loc0">The location to transform</param>
+	''' <param name="cameraNumber">The camera number used to calculate</param>
+	''' <returns>The calculated position</returns>
+	Public Function TcpLocToCamera(ByVal loc0 As Location, ByVal cameraNumber As Integer) As Location
+		Dim loc As New Location
+		Dim rt As New Location
+		Dim cameraTool As New Location
+
+		rt = Robot.Tool
+		cameraTool = getCameraToolTransform(cameraNumber) 
+		
+		loc = loc0.Mul(rt.Inverse)		
+		loc = loc.Mul(cameraTool)
+		
+		Return loc
+	End Function
+	
+	''' <summary>
+	''' Calculate the approach Yaw given 2 aruco locations and the yaw at the picture position
+	''' </summary>
+	''' <param name="cameraYaw">The camera yaw position</param>
+	''' <param name="loc1">The first location</param>
+	''' <param name="loc2">The second location</param>
+	''' <param name="approachYaw">The caluclated approach yaw</param>
+	''' <returns>Was the operaton successful</returns>
+	Public Function getApproachYaw(ByVal cameraYaw As Double, ByVal loc1 As Location, ByVal loc2 As Location, ByRef approachYaw As Double) As Boolean 
+		Dim arucos_yaw As Double = 180.0 * Math.Atan2(loc2.Y - loc1.Y, loc2.X - loc1.X) / Math.PI
+		Dim approach_del As Double = 30
+		Dim i As Integer
+		
+		Dim yaw1, yaw2 As Double
+		yaw1 = arucos_yaw + 90
+		yaw2 = arucos_yaw - 90
+		
+		If yaw1 > 180 Then
+			yaw1 = yaw1 - 360
+		End If
+		
+		If yaw2 < -180 Then
+			yaw2 = yaw2 + 360
+		End If
+		
+		If Math.Abs(yaw1 - cameraYaw) >  Math.Abs(yaw2 - cameraYaw) Then
+			approachYaw = yaw2
+		Else 
+			approachYaw = yaw1
+		End If			
+				
+		If Math.Abs(cameraYaw - approachYaw) > 30 Then
+			'Console.WriteLine("cameraYaw = " & CStr(cameraYaw) & ", " & "approachYaw = " & CStr(approachYaw))
+			approachYaw = cameraYaw ' don't trust the new yaw calcs. leave yaw same.
+			Return False
+		End If
+		
+		Return True
+	End Function
+	
+	''' <summary>
+	''' Return the standard deviation of array
+	''' </summary>
+	''' <param name="array">The array to process</param>
+	''' <returns>The standard deviation</returns>
+	Public Function stdev(ByVal array() As Double) As Double 
+		Dim n As Integer = array.Length
+		
+		Dim avg As Double = 0
+		Dim std As Double = 0
+		
+		Dim i As Integer = 0
+		For i = 0 To n-1
+			avg = avg + array(i)
+		Next i
+		
+		avg = avg / n
+		For i = 0 To n-1
+			std = std + (array(i) - avg)*(array(i) - avg)
+		Next i
+		
+		std = Math.Sqrt(std/n)
+		
+		Return std				
+	End Function
+	
+    ''' <summary>
+    ''' LogToFile routine
+	''' Saves string to file specifiled in the StreamWriter above
+	''' If the path contains non default folder, the user will need to create it
+    ''' </summary>
+    ''' <param name="arg1">string that will be saved to file and location defined above </param> 
+    Public Sub LogToFile(LogStream As StreamWriter, logString As String)
+		Dim exs As New Exception
+		Try
+			LogStream.WriteLine(logString)
+		Catch exs
+			WriteToCalibrationDisplay(exs.Message)
+		End Try
+	End Sub
+
+	''' <summary>
+	''' Delete a file if it exists
+	''' </summary>
+	''' <param name="filePath">The file to delete</param>
+	Public Sub DeleteFileIfExists(filePath As String)
+		Dim exc As Exception
+	    Try
+	        File.DeleteFile(filePath)
+	    Catch exc
+	        ' do nothing
+	    End Try
+	End Sub
+	
+	''' <summary>
+	''' Get the offset from the outer link to the camera
+	''' </summary>
+	''' <param name="CameraNumber">The camera to process.</param>
+	''' <returns>The calculated offset</returns>
+	Public Function getCameraToolTransform(ByVal CameraNumber As Integer) As Location
+		Dim cameraTool As New Location
+		
+		cameraTool = RT0.Clone 
+		Dim zsign As Integer = Math.Sign(RT0.Z) 		
+		If CameraNumber = 1 Then
+			cameraTool.X = J4ToFrontCameraDistZ
+			cameraTool.Z = zsign*J4ToFrontCameraDist
+		Else 
+			cameraTool.X = J4ToBottomCameraDistZ
+			cameraTool.Z = zsign*J4ToBottomCameraDist			
+		End If
+		
+		Return cameraTool
+	End Function
+	
+	''' <summary>
+	''' Module initialization
+	''' </summary>
+	''' <remarks>Store the restart TOOL transformation (16051)</remarks>
+	Public Sub Init() 		
+		RT0.X = Controller.PDbNum(16051, 1, 0, 1) 
+		RT0.Y = Controller.PDbNum(16051, 1, 0, 2) 
+		RT0.Z = Controller.PDbNum(16051, 1, 0, 3) 
+		RT0.Yaw = Controller.PDbNum(16051, 1, 0, 4) 
+		RT0.Pitch = Controller.PDbNum(16051, 1, 0, 5) 
+		RT0.Roll = Controller.PDbNum(16051, 1, 0, 6) 
+		
+		Return
+	End Sub
+	
+End Module
